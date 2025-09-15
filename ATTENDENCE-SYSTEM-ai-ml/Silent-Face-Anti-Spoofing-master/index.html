@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PresenceAI — Unified Demo</title>
+  <link rel="stylesheet" href="main.css">
+  <style>
+    /* Additional inline styles for specific components */
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar">
+    <div class="logo">PA</div>
+    <h2 class="title">PresenceAI</h2>
+    <select id="classSelector" class="class-selector" aria-label="Filter by class">
+      <option value="all">All Classes</option>
+      <option value="A">Class A</option>
+      <option value="B">Class B</option>
+      <option value="C">Class C</option>
+    </select>
+    <nav class="nav" role="navigation">
+      <button data-page="page-dashboard" class="nav-link active" aria-pressed="true">Dashboard</button>
+      <button data-page="page-presence" class="nav-link" aria-pressed="false">Presence Map</button>
+      <!-- Replaced Timeline with Attendance -->
+      <button data-page="page-attendance" class="nav-link" aria-pressed="false">Attendance</button>
+      <button data-page="page-trust" class="nav-link" aria-pressed="false">Trust Score</button>
+      <button data-page="page-insights" class="nav-link">Insights</button>
+    </nav>
+    <div class="legend" aria-hidden="true">
+      <p><span class="dot present"></span> Present</p>
+      <p><span class="dot absent"></span> Absent</p>
+      <p><span class="dot late"></span> Late</p>
+      <p><span class="dot suspicious"></span> Suspicious</p>
+    </div>
+    <div style="margin-top:auto">
+      <div style="font-weight:700">Signed in as</div>
+      <div id="signedUser" style="margin-top:6px; font-weight:800">Guest</div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button id="openSign" class="btn-ghost">Sign In</button>
+        <button id="signOut" class="btn-ghost" style="display:none">Sign Out</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main id="mainContent" class="main">
+    <!-- Dashboard Page -->
+    <section id="page-dashboard" class="page active" aria-live="polite">
+      <header class="page-header">
+        <h1>Dashboard</h1>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="badge" id="roleBadge">Guest</div>
+          <div class="controls">
+            <button id="regenUsers" class="btn-ghost" title="Regenerate sample data">Regenerate</button>
+            <button id="downloadSnapshot" class="btn-ghost" title="Download CSV snapshot">Export CSV</button>
+          </div>
+        </div>
+      </header>
+      <div class="stats">
+        <div class="stat-card">Present <span id="stat-present" class="number">0</span></div>
+        <div class="stat-card">Absent <span id="stat-absent" class="number">0</span></div>
+        <div class="stat-card">Late <span id="stat-late" class="number">0</span></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Quick Presence Preview</h3>
+          <div id="presencePreview" class="presence-grid" style="margin-top:12px;"></div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+            <button id="openPresence" class="btn-primary">Open Full Map</button>
+            <button id="addStudentBtn" class="btn-ghost" style="display:none">Add Student</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Leader board</h3>
+          <div id="leaderboard" class="leaderboard"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Presence Map Page -->
+    <section id="page-presence" class="page" aria-hidden="true">
+      <header class="page-header"><h1>Presence Map</h1></header>
+      <div id="presenceMap" class="presence-grid"></div>
+    </section>
+
+    <!-- Attendance Page (new) -->
+    <section id="page-attendance" class="page" aria-hidden="true">
+      <header class="page-header">
+        <div>
+          <h1>Attendance</h1>
+          <div id="attendanceSub" style="color:var(--muted); font-weight:700; margin-top:6px;">Choose class & date to load attendance</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <select id="attendanceClass" class="class-selector" aria-label="Filter by class for attendance">
+            <option value="all">All Classes</option>
+            <option value="A">Class A</option>
+            <option value="B">Class B</option>
+            <option value="C">Class C</option>
+          </select>
+          <input id="attendanceDate" type="date" class="class-selector" style="padding:8px;" />
+          <button id="loadAttendanceBtn" class="btn-ghost">Load</button>
+          <button id="attendanceUnpinBtn" class="btn-ghost" style="display:none;margin-left:6px">Unpin</button>
+          <button id="attendanceExportBtn" class="btn-ghost">Export CSV</button>
+        </div>
+      </header>
+
+      <div class="card">
+        <h3>Attendance for <span id="attendanceTitle">--</span></h3>
+        <div id="attendanceList" style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;"></div>
+      </div>
+    </section>
+
+    <!-- Timeline Page removed (replaced by Attendance in nav) -->
+
+    <!-- Trust Score Page -->
+    <section id="page-trust" class="page" aria-hidden="true">
+      <header class="page-header"><h1>Trust Score</h1></header>
+      <div class="trust-layout">
+        <div class="trust-top">
+          <h3>Top Students</h3>
+          <div id="trustTopGrid" class="top-grid"></div>
+        </div>
+
+        <div class="trust-list">
+          <h3>All Students</h3>
+          <div id="trustLeaderboard" class="leaderboard scrollable"></div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      // Prevent the preview's scroll from propagating to the page (works for mouse wheel and touch)
+      (function(){
+        const el = document.getElementById('presencePreview');
+        if(!el) return;
+        el.addEventListener('wheel', function(e){
+          const atTop = el.scrollTop === 0 && e.deltaY < 0;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight && e.deltaY > 0;
+          if(atTop || atBottom) {
+            // allow page scroll when hitting the edge, but prevent default bubbling when within
+            e.stopPropagation();
+          }
+        }, { passive: false });
+
+        el.addEventListener('touchmove', function(e){
+          // stop touchmove from scrolling the body when moving inside the preview
+          e.stopPropagation();
+        }, { passive: true });
+      })();
+    </script>
+
+    <!-- Insights Page -->
+    <section id="page-insights" class="page" aria-hidden="true">
+      <header class="page-header"><h1>Insights</h1></header>
+
+      <div class="insights-container">
+        <!-- Left: AI Analytics list (scrollable) -->
+        <div class="analytics-list" id="analyticsList">
+          <div class="searchbox">
+            <input id="analyticsSearch" placeholder="Search analytics..." aria-label="Search analytics"/>
+            <div class="analytics-badge live-badge" title="Live">LIVE</div>
+          </div>
+          <!-- analytics items appended here -->
+        </div>
+
+        <!-- Right: detail view (chart + pie + details) -->
+        <div class="insights-right" id="insightsRight">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h3 id="insightTitle" style="margin:0">Select an analysis</h3>
+              <div id="insightDesc" style="color:var(--muted); font-size:0.95rem; margin-top:6px;">Click an item on the left to view graphs & breakdowns.</div>
+            </div>
+            <div style="text-align:right; color:var(--muted); font-weight:600;">
+              <div style="font-size:0.85rem; margin-bottom:6px;">Class filter:</div>
+              <div id="insightFilterText">All</div>
+            </div>
+          </div>
+
+          <div class="topbar" style="justify-content:space-between;">
+            <div class="controls" style="gap:10px;">
+              <button id="refreshInsight" class="btn-ghost">Refresh</button>
+              <button id="exportInsightCSV" class="btn-ghost">Export CSV</button>
+            </div>
+            <div style="color:var(--muted); font-weight:700;">Snapshot • <span id="insightTime">--</span></div>
+          </div>
+
+          <!-- Charts row: line + pie (pie has legend to right) -->
+          <div class="charts-row" style="margin-top:12px;">
+            <div class="chart-card chart-large">
+              <canvas id="lineChart" role="img" aria-label="Trend line chart"></canvas>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div class="chart-card chart-small">
+                <canvas id="pieChart" role="img" aria-label="Distribution pie chart"></canvas>
+              </div>
+              <div id="pieLegend" style="margin-top:6px; font-size:0.9rem;"></div>
+            </div>
+          </div>
+
+          <!-- Trust card + tips below charts -->
+          <div style="margin-top:12px;">
+            <div class="trust-card">
+              <div class="trust-big">
+                <div style="font-size:0.95rem;font-weight:800;color:var(--soft-white)">Trust Score</div>
+                <div id="trustNumber" class="trust-number">--</div>
+                <div id="trustPctDesc" class="trust-sub">Average trust across filtered users</div>
+                <div style="margin-top:6px;"><button id="improveScore" class="btn-primary">Improve My Score</button></div>
+              </div>
+              <div>
+                <h4 style="margin:0 0 8px 0;">AI Tips</h4>
+                <div class="tips-list" id="tipsList">
+                  <!-- tips appended here -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="analytics-details" style="margin-top:14px;">
+            <div class="details-card">
+              <h4>Top students (by trust)</h4>
+              <div id="topStudentsList" class="small-list"></div>
+            </div>
+            <div class="details-card">
+              <h4>Quick stats</h4>
+              <div id="quickStats" style="font-size:0.95rem; color:var(--muted);"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add student modal -->
+  <div id="addModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <h3>Add Student</h3>
+    <label for="addId">Student ID</label>
+    <input id="addId" placeholder="unique id (e.g. sai)" />
+    <label for="addName">Name</label>
+    <input id="addName" placeholder="Full name" />
+    <label for="addClass">Class</label>
+    <input id="addClass" placeholder="A / B / C" />
+    <label for="addMobile">Mobile</label>
+    <input id="addMobile" placeholder="Mobile (for parent login)" />
+    <label for="addAvatar">Avatar (optional)</label>
+    <input id="addAvatar" type="file" accept="image/*" />
+    <label for="addFace">Face image (optional)</label>
+    <input id="addFace" type="file" accept="image/*" />
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="saveAdd" class="btn-primary">Save</button>
+      <button id="cancelAdd" class="btn-ghost">Cancel</button>
+    </div>
+    <div id="addMsg" class="small muted" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Sign-in modal -->
+  <div id="signModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <h3>Sign In</h3>
+    <label for="signRole">Role</label>
+    <select id="signRole">
+      <option value="hod">HOD</option>
+      <option value="teacher">Teacher</option>
+      <option value="parent">Parent</option>
+    </select>
+    <label for="signUser">Username</label>
+    <input id="signUser" placeholder="hod / teacher or child's name for parent" />
+    <label for="signPass">Password</label>
+    <input id="signPass" placeholder="password" />
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="doSign" class="btn-primary">Sign In</button>
+      <button id="cancelSign" class="btn-ghost">Cancel</button>
+    </div>
+    <div id="signMsg" class="small muted" style="margin-top:8px"></div>
+  </div>
+
+  <script>
+    
+  // --- API Base auto-detect ---
+  // If served from Live Server (port 5500) or any static server, force backend at 127.0.0.1:8000
+  // If served directly by FastAPI (same origin), use location.origin
+  let API_BASE;
+  if (location.port === "5500" || location.protocol === "file:") {
+    API_BASE = "http://127.0.0.1:8000"; 
+  } else {
+    API_BASE = location.origin;
+  }
+  console.log("Using API_BASE =", API_BASE);
+
+
+    /* ---------- Client-side JS for dashboard + role logic ---------- */
+
+  // Utility state
+  let users = [];
+  let selectedClass = "all";
+  let selectedAnalyticsId = null;
+  // Attendance pin: when true, keep Attendance page visible until user navigates away or unpins
+  let attendancePinned = false;
+  let pinnedAttendanceDate = null;
+  let pinnedAttendanceClass = 'all';
+  // Map of student_id -> status for the pinned attendance date (so live updates don't overwrite it)
+  let pinnedAttendanceRecords = {};
+
+  // Helper: normalize a display name to a lookup key
+  function normalizeNameKey(name){
+    if(!name) return '';
+    return String(name).toLowerCase().replace(/\s+/g,' ').trim();
+  }
+
+  // Helper: get pinned status for a user by checking multiple candidate keys
+  function getPinnedStatusForUser(u){
+    if(!attendancePinned || !pinnedAttendanceRecords) return null;
+    const candidates = [];
+    if(u == null) return null;
+    if(u.id !== undefined && u.id !== null) candidates.push(String(u.id));
+    if(u.student_id !== undefined && u.student_id !== null) candidates.push(String(u.student_id));
+    if(u.studentId !== undefined && u.studentId !== null) candidates.push(String(u.studentId));
+    const n = normalizeNameKey(u.name || u.display_name || u.fullName || '');
+    if(n) candidates.push(n);
+    // also try numeric variants without prefix U (e.g., U1 vs 1)
+    for(const c of [...candidates]){
+      if(typeof c === 'string' && c.startsWith('U')) candidates.push(c.replace(/^U/,'') );
+      else if(typeof c === 'string' && /^\d+$/.test(c)) candidates.push('U' + c);
+    }
+    for(const k of candidates){
+      if(!k) continue;
+      if(pinnedAttendanceRecords.hasOwnProperty(k)) return pinnedAttendanceRecords[k];
+    }
+    return null;
+  }
+    const ANALYTICS = [
+      { id:'late_month', title:'Late — This Month', description:'Percentage of students marked late (snapshot)', compute: null },
+      { id:'punctuality_A', title:'Punctuality — Class A', description:'Punctuality issues for class A', compute: null },
+      { id:'consistent_C', title:'Consistent — Class C', description:'Students with high consistency (trust ≥ 85) in Class C', compute: null },
+      { id:'suspicious_count', title:'Suspicious activity', description:'Number of flagged suspicious statuses', compute: null },
+      { id:'avg_trust', title:'Average Trust', description:'Average trust across the filtered population', compute: null },
+      { id:'attendance_rate', title:'Attendance Rate', description:'Estimated present vs absent snapshot', compute: null }
+    ];
+
+
+   // Helpers for fetching (inject token if available)
+// NOTE: apiFetch now uses API_BASE prefix so requests go to configured backend
+function getToken() { return localStorage.getItem('pa_token'); }
+async function apiFetch(path, opts = {}) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  // default Accept header
+  if (!opts.headers['Accept']) opts.headers['Accept'] = 'application/json, text/plain, /';
+
+  const t = getToken();
+  if (t) opts.headers['Authorization'] = 'Bearer ' + t;
+
+  // ensure path is absolute to API_BASE
+  const url = path.startsWith('http') ? path : API_BASE.replace(/\/$/,'') + (path.startsWith('/') ? '' : '/') + path;
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (networkErr) {
+    console.error('Network error fetching', url, networkErr);
+    throw { message: 'Network error', detail: networkErr };
+  }
+
+  const ct = res.headers.get('content-type') || '';
+  let body;
+  try {
+    if (ct.includes('application/json')) {
+      body = await res.json().catch(()=>null);
+    } else {
+      body = await res.text().catch(()=>null);
+    }
+  } catch (parseErr) {
+    body = await res.text().catch(()=>null);
+  }
+  if (!res.ok) {
+    console.warn('apiFetch non-OK', { url, status: res.status, body });
+    throw body || { message: 'Request failed', status: res.status };
+  }
+  return body;
+}
+
+/* ---------- Avatar URL normalization helper ---------- */
+/* Ensures the final src is absolute under API_BASE when needed,
+   and accepts full http(s), data URLs, or server-relative paths.
+   Accepts fields: avatar, avatarUrl, avatar_url or a plain filename.
+*/
+function normalizeAvatarUrl(u) {
+  // default avatar path on server (adjust if your backend uses a different default)
+  const defaultPath = '/avatars/default.jpg';
+  if (!u) {
+    return API_BASE.replace(/\/$/, '') + defaultPath;
+  }
+  // If caller passed an object, try to pull common fields
+  if (typeof u === 'object') {
+    u = u.avatar || u.avatarUrl || u.avatar_url || u.photo || u.photoUrl || u.photo_url || u.name || '';
+  }
+  u = String(u || '');
+  u = u.trim();
+  if (!u) return API_BASE.replace(/\/$/, '') + defaultPath;
+  // already absolute:
+  if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:')) return u;
+  // server-relative (starts with '/')
+  if (u.startsWith('/')) return API_BASE.replace(/\/$/, '') + u;
+  // just a filename: treat as under /avatars/
+  return API_BASE.replace(/\/$/, '') + '/avatars/' + u;
+}
+
+  // single canonical loadUsers
+    async function loadUsers(){
+      // Load users from backend respecting token (server filters by teacher/parent)
+      try {
+        const data = await apiFetch('/api/students');
+        users = Array.isArray(data) ? data : [];
+      } catch (e) {
+        console.warn('loadUsers failed', e);
+        // fallback to empty list
+        users = [];
+      }
+      // normalize statuses
+      users.forEach(u => { u.status = (u.status || '').toLowerCase(); });
+      // update UI state
+      toggleRoleControls();
+      // If attendance is pinned, avoid forcing a page change during periodic refreshes.
+      // Instead, refresh the visible attendance list (if pinned) so the user stays on their selected date.
+      if(attendancePinned){
+        try { renderAttendanceList(); } catch(e){ console.warn('renderAttendanceList during pinned refresh failed', e); }
+      } else {
+        renderCurrentPage();
+      }
+    }
+
+    // --- ADDED HELPERS: safeLoadUsersOnce + updateUserPresence ---
+    // Guard to prevent heavy simultaneous reloads
+    let _loadUsersRunning = false;
+    async function safeLoadUsersOnce(){
+      // If a live incremental update failed, call loadUsers() but avoid overlapping calls
+      if(_loadUsersRunning) return;
+      _loadUsersRunning = true;
+      try {
+        await loadUsers();
+      } catch(e){
+        console.warn('safeLoadUsersOnce loadUsers failed', e);
+      } finally {
+        // small delay before allowing next full reload
+        setTimeout(()=> { _loadUsersRunning = false; }, 600);
+      }
+    }
+
+    // Update a single user's presence in the local users[] and update UI elements:
+    // payload expected: { student_id, status, timestamp, confidence? }
+    function updateUserPresence(payload){
+      if(!payload || !payload.student_id) return;
+      const sid = payload.student_id;
+      const status = (payload.status || 'Present').toLowerCase();
+
+      // find user in local array
+      const idx = users.findIndex(u => String(u.id) === String(sid));
+      if(idx === -1){
+        // not in local cache — we can safely reload once to sync
+        safeLoadUsersOnce();
+        return;
+      }
+
+      // update local object
+      users[idx].status = status;
+      users[idx].liveSeenAt = payload.timestamp || new Date().toISOString();
+
+      // Update counts quickly (instead of re-rendering everything)
+      try {
+        // update stats numbers
+        const filtered = filterUsers();
+        document.getElementById('stat-present').innerText = filtered.filter(u=> (u.status||'').toLowerCase() === 'present').length;
+        document.getElementById('stat-absent').innerText = filtered.filter(u=> (u.status||'').toLowerCase() === 'absent').length;
+        document.getElementById('stat-late').innerText = filtered.filter(u=> (u.status||'').toLowerCase() === 'late').length;
+      } catch(e){
+        console.warn('update counts failed', e);
+      }
+
+      // Update the single presence card if it exists
+      try {
+        const card = document.querySelector(`.presence-card[data-id="${sid}"]`);
+        if(card){
+          // status bubble
+          const statusEl = card.querySelector('.status');
+          if(statusEl){
+            statusEl.className = 'status ' + status;
+            statusEl.innerText = (payload.status || status).toString();
+          }
+          // update timestamp or live label if present (optional)
+          const timeEl = card.querySelector('.live-seen-at');
+          if(timeEl){
+            timeEl.innerText = new Date(payload.timestamp || Date.now()).toLocaleTimeString();
+          }
+        } else {
+          // If card not on current page (filtered out), nothing to update in DOM
+          // Optionally re-render a preview or presence map if you want:
+          const activePage = document.querySelector('.page.active');
+          if(activePage && activePage.id === 'page-presence') {
+            // minimal re-render for presence map if it's active
+            renderPresence('presenceMap');
+          } else {
+            // update dashboard preview (top 6)
+            renderDashboard();
+          }
+        }
+      } catch(e){
+        console.warn('update card failed', e);
+        // fallback: minimal page re-render
+        renderCurrentPage();
+      }
+    }
+    // --- END ADDED HELPERS ---
+
+    // Merge attendance results into users[] cache
+    function applyAttendanceToUsers(attRecords){
+      if(!Array.isArray(attRecords)) return;
+      const idToIndex = {};
+      users.forEach((u,i)=> idToIndex[String(u.id)] = i);
+      let updatedCount = 0;
+      for(const r of attRecords){
+        const sid = String(r.student_id || r.id || r.studentId || '').trim();
+        if(!sid) continue;
+        const idx = idToIndex[sid];
+        if(idx === undefined || idx === -1){
+          // attendance for unknown user — log and optionally refresh full list later
+          console.warn('Attendance record for unknown student', sid, r);
+          continue;
+        }
+        const status = (r.status || r.state || r.label || '').toString().toLowerCase() || 'present';
+        users[idx].status = status;
+        users[idx].liveSeenAt = r.timestamp || r.ts || new Date().toISOString();
+      updatedCount++;
+      }
+      console.log('Applied attendance to ' + updatedCount + ' users');
+      // refresh counts and UI in minimal way
+      renderDashboard();
+      const active = document.querySelector('.page.active');
+      if(active && active.id === 'page-presence') renderPresence('presenceMap');
+    }
+
+    // Filtering
+    function filterUsers(){
+      return users.filter(u => selectedClass === 'all' || (u.class || '').toString() === selectedClass);
+    }
+
+    // Render presence cards
+    function userCard(u){
+      const statusLower = (u.status || '').toLowerCase();
+      // compute avatar src robustly: accept multiple possible fields (INCLUDES photo)
+      const avatarField = u.photo || u.photo_url || u.photoUrl || u.avatar || u.avatarUrl || u.avatar_url || u.avatarUrl || '';
+      const avatarSrc = normalizeAvatarUrl(avatarField || u.avatarUrl || u.avatar_url);
+      // image onerror fallback to default (in case server returns broken path)
+      const onerr = "this.onerror=null;this.src='" + API_BASE.replace(/\/$/,'') + "/avatars/default.jpg'";
+      return `
+      <div class="presence-card" data-id="${u.id}">
+        <img src="${avatarSrc}" alt="${u.name}" onerror="${onerr}">
+        <div class="name">${u.name}</div>
+        <div class="text-sm muted">${u.class || ''}</div>
+        <div class="status ${statusLower}" style="margin-top:8px">${u.status || 'absent'}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;justify-content:center">
+          ${canMark() ? '<button class="btn-ghost mark-btn" data-id="' + u.id + '">Mark</button>' : ''}
+          ${isHod() ? '<button class="btn-ghost del-btn" data-id="' + u.id + '">Delete</button>' : ''}
+        </div>
+      </div>`;
+    }
+
+    function renderPresence(containerId){
+      const container = document.getElementById(containerId);
+      container.innerHTML = filterUsers().map(userCard).join('');
+      wirePresenceButtons();
+    }
+
+    function renderDashboard(){
+      const data = filterUsers();
+      document.getElementById('stat-present').innerText = data.filter(u=> (u.status||'').toLowerCase() === 'present').length;
+      document.getElementById('stat-absent').innerText = data.filter(u=> (u.status||'').toLowerCase() === 'absent').length;
+      document.getElementById('stat-late').innerText = data.filter(u=> (u.status||'').toLowerCase() === 'late').length;
+      document.getElementById('presencePreview').innerHTML = data.slice(0,6).map(userCard).join('');
+    }
+
+    async function renderTimeline(){
+      const t = document.getElementById('timeline');
+      if(!t) return;
+      t.innerHTML = '';
+      const data = filterUsers().slice(0,12);
+      for (const u of data){
+        // Try to fetch timeline for user
+        try {
+          const hist = await apiFetch(`/api/timeline/${encodeURIComponent(u.id)}`);
+          const html = (Array.isArray(hist) ? hist : []).map(h=>'<div style="padding:6px;border-bottom:1px dashed #eef2f7"><strong>' + h.ts + '</strong> ' + h.type + ' - ' + (h.label || '') + '</div>').join('');
+          const entry = document.createElement('div');
+          entry.className = 'timeline-entry';
+          entry.innerHTML = '<strong>' + u.name + '</strong> (' + u.class + ') - ' + u.status + '<hr>' + html;
+          t.appendChild(entry);
+        } catch (e) {
+          const entry = document.createElement('div');
+          entry.className = 'timeline-entry';
+          entry.innerHTML = '<strong>' + u.name + '</strong> (' + u.class + ') - ' + u.status + '<hr>No timeline';
+          t.appendChild(entry);
+        }
+      }
+    }
+
+    async function renderTrustPage(){
+      const data = filterUsers();
+      const top = [...data].sort((a,b)=> (b.trustScore||0) - (a.trustScore||0)).slice(0,6);
+      document.getElementById('trustTopGrid').innerHTML = top.map(u=>{
+        // include photo field when available
+      const avatarField = u.photo || u.photo_url || u.photoUrl || u.avatar || u.avatarUrl || u.avatar_url || '';
+      const avatarSrc = normalizeAvatarUrl(avatarField);
+      const onerr = "this.onerror=null;this.src='" + API_BASE.replace(/\/$/,'') + "/avatars/default.jpg'";
+      return `
+        <div class="top-card">
+          <img src="${avatarSrc}" alt="${u.name}" onerror="${onerr}">
+          <div class="name">${u.name}</div>
+          <div class="class muted">${u.class}</div>
+          <div class="score">${u.trustScore}%</div>
+        </div>
+      `}).join('');
+      document.getElementById('trustLeaderboard').innerHTML = [...data].sort((a,b)=> (b.trustScore||0) - (a.trustScore||0)).map(function(u,i){
+        return '<div><span>' + (i+1) + '. ' + u.name + ' (' + (u.class || '') + ')</span><span>' + (u.trustScore || 0) + '%</span></div>';
+      }).join('');
+    }
+
+    function renderInsights(){
+      const listEl = document.getElementById('analyticsList');
+      listEl.innerHTML = `
+        <div class="searchbox">
+          <input id="analyticsSearch" placeholder="Search analytics..." aria-label="Search analytics"/>
+          <div class="analytics-badge live-badge" title="Live">LIVE</div>
+        </div>
+      `;
+      for (const a of ANALYTICS){
+        const el = document.createElement('div');
+        el.className = 'analytics-item';
+        el.dataset.id = a.id;
+        el.innerHTML = '<div class="meta"><div class="analytics-title">' + a.title + '</div><div class="analytics-desc">' + a.description + '</div></div><div class="analytics-badge">View</div>';
+        listEl.appendChild(el);
+      }
+
+      // click handlers wired via helper so we can reuse after filtering
+      function wireAnalyticsItems(){
+        document.querySelectorAll('.analytics-item').forEach(item=>{
+          item.onclick = () => {
+            document.querySelectorAll('.analytics-item').forEach(i=>i.classList.remove('selected'));
+            item.classList.add('selected');
+            selectedAnalyticsId = item.dataset.id;
+            showAnalyticsDetail(selectedAnalyticsId);
+          };
+        });
+      }
+      wireAnalyticsItems();
+
+      // default select first
+      const first = document.querySelector('.analytics-item');
+      if(first){
+        first.classList.add('selected');
+        selectedAnalyticsId = first.dataset.id;
+        showAnalyticsDetail(selectedAnalyticsId);
+      }
+
+      const search = document.getElementById('analyticsSearch');
+      if(search) search.oninput = (e)=> renderInsightsFiltered(e.target.value);
+
+      function renderInsightsFiltered(filterText){
+        const list = document.getElementById('analyticsList');
+        list.innerHTML = ''
+          + '<div class="searchbox">'
+          +   '<input id="analyticsSearch" placeholder="Search analytics..." aria-label="Search analytics" value="' + (filterText || '') + '"/>'
+          +   '<div class="analytics-badge live-badge" title="Live">LIVE</div>'
+          + '</div>';
+        for (const a of ANALYTICS){
+          if(filterText && !( (a.title + ' ' + a.description).toLowerCase().includes(filterText.toLowerCase()) )) continue;
+          const el = document.createElement('div');
+          el.className = 'analytics-item';
+          el.dataset.id = a.id;
+          el.innerHTML = '<div class="meta"><div class="analytics-title">' + a.title + '</div><div class="analytics-desc">' + a.description + '</div></div><div class="analytics-badge">View</div>';
+          list.appendChild(el);
+        }
+        // re-wire click handlers after re-rendering list
+        wireAnalyticsItems();
+        // re-attach search handler (input element was re-created)
+        const newSearch = document.getElementById('analyticsSearch');
+        if(newSearch) newSearch.oninput = (e)=> renderInsightsFiltered(e.target.value);
+      }
+    }
+    function makeLastDays(n){
+      const labels = [];
+      for (let i = n - 1; i >= 0; i--) {
+        if (i === 0) labels.push('Today'); else labels.push('D-' + i);
+      }
+      return labels;
+    }
+    function makeTrend(base, points=7){
+      const arr=[];
+      for(let i=0;i<points;i++){
+        const jitter = Math.round((Math.random()*12)-6);
+        let v = Math.max(0, Math.min(100, base + jitter));
+        arr.push(v);
+      }
+      return arr;
+    }
+    function topByTrust(list, n=5){
+      return [...list].sort((a,b)=> (b.trustScore||0) - (a.trustScore||0)).slice(0,n);
+    }
+  function showAnalyticsDetail(id){
+    const analytic = ANALYTICS.find(a=>a.id===id);
+    if(!analytic) return;
+    const filtered = filterUsers();
+    let data;
+    // simple compute implementations
+    if(id === 'late_month'){
+      const total = filtered.length || 1;
+      const late = filtered.filter(u=> (u.status||'').toLowerCase() === 'late').length;
+      const perc = Math.round((late/total)*100);
+      data = {
+        pie: [late, total-late],
+        pieLabels: ['Late','On time'],
+        trend: makeTrend(perc,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: perc + '% students late',
+        topStudents: topByTrust(filtered,5)
+      };
+    } else if(id === 'punctuality_A'){
+      const onlyA = filtered.filter(u=> u.class === 'A');
+      const total = onlyA.length || 1;
+      const notPunctual = onlyA.filter(u=> (u.trustScore||0) < 75 ).length;
+      const perc = Math.round((notPunctual/total)*100);
+      data = {
+        pie: [notPunctual, total-notPunctual],
+        pieLabels: ['Not punctual','Punctual'],
+        trend: makeTrend(perc,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: total===0 ? 'No students in Class A' : (perc + '% not punctual in Class A'),
+        topStudents: topByTrust(onlyA,5)
+      };
+    } else if(id === 'consistent_C'){
+      const onlyC = filtered.filter(u=> u.class === 'C');
+      const total = onlyC.length || 1;
+      const consistent = onlyC.filter(u=> (u.trustScore||0) >= 85).length;
+      const perc = Math.round((consistent/total)*100);
+      data = {
+        pie: [consistent, total-consistent],
+        pieLabels: ['Consistent','Not consistent'],
+        trend: makeTrend(perc,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: total===0 ? 'No students in Class C' : (perc + '% consistent in Class C'),
+        topStudents: topByTrust(onlyC,5)
+      };
+    } else if(id === 'suspicious_count'){
+      const total = filtered.length || 1;
+      const suspicious = filtered.filter(u=> (u.status||'').toLowerCase() === 'suspicious').length;
+      const perc = Math.round((suspicious/total)*100);
+      data = {
+        pie: [suspicious, total-suspicious],
+        pieLabels: ['Suspicious','Normal'],
+        trend: makeTrend(perc,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: suspicious + ' flagged suspicious',
+        topStudents: topByTrust(filtered,5)
+      };
+    } else if(id === 'avg_trust'){
+      const total = filtered.length || 1;
+      const avg = Math.round(filtered.reduce((a,b)=> a + (b.trustScore||0), 0) / total);
+      data = {
+        pie: [avg, 100-avg],
+        pieLabels: ['Avg trust','Remaining to 100'],
+        trend: makeTrend(avg,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: 'Average trust ' + avg + '%',
+        topStudents: topByTrust(filtered,5)
+      };
+    } else if(id === 'attendance_rate'){
+      const total = filtered.length || 1;
+      const present = filtered.filter(u=> (u.status||'').toLowerCase() === 'present').length;
+      const perc = Math.round((present/total)*100);
+      data = {
+        pie: [present, total-present],
+        pieLabels: ['Present','Absent'],
+        trend: makeTrend(perc,7),
+        trendLabels: makeLastDays(7),
+        detailsTitle: perc + '% present',
+        topStudents: topByTrust(filtered,5)
+      };
+    }
+
+    document.getElementById('insightTitle').innerText = analytic.title;
+    document.getElementById('insightDesc').innerText = analytic.description;
+    document.getElementById('insightFilterText').innerText = (selectedClass==='all' ? 'All' : selectedClass);
+    document.getElementById('insightTime').innerText = new Date().toLocaleString();
+
+    // draw charts
+    drawLineChart(document.getElementById('lineChart'), data.trendLabels, data.trend);
+    drawPieChart(document.getElementById('pieChart'), data.pie, data.pieLabels);
+
+    // legend
+    document.getElementById('pieLegend').innerHTML = data.pieLabels.map(function(lab, i){
+      const colors = ["#ef4444","#10b981","#f59e0b","#8b5cf6","#0ea5e9","#e11d48"];
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;color:rgba(255,255,255,0.9);">'
+        + '<div style="width:12px;height:12px;border-radius:3px;background:' + colors[i % colors.length] + ';"></div>'
+        + '<div style="flex:1;color:rgba(255,255,255,0.86)">' + lab + '</div>'
+        + '<div style="font-weight:700;color:rgba(255,255,255,0.96)">' + (data.pie[i]) + '</div>'
+        + '</div>';
+    }).join("");
+
+    // top students
+    const topDiv = document.getElementById('topStudentsList');
+    if (data.topStudents && data.topStudents.length) {
+      topDiv.innerHTML = data.topStudents.map(function(s, idx){
+        return '<div><span>' + (idx + 1) + '. ' + s.name + '</span><span>' + ((s.trustScore || s.trust) ? (s.trustScore || s.trust) + '%' : '') + '</span></div>';
+      }).join('');
+    } else {
+      topDiv.innerHTML = '<div style="color:var(--muted)">No students to show</div>';
+    }
+
+    document.getElementById('quickStats').innerHTML = '<div style="color:var(--muted)">' + (data.detailsTitle || '') + '</div>';
+
+    const avgTrust = Math.round(filtered.reduce((a,b)=> a + (b.trustScore||0), 0) / (filtered.length || 1));
+    document.getElementById('trustNumber').innerText = avgTrust + '%';
+    document.getElementById('trustPctDesc').innerText = 'Average trust across ' + filtered.length + ' users';
+
+    const tips = [];
+    if(avgTrust < 70) tips.push('Focus on verification — run spot checks for identities.');
+    else tips.push('Trust level is good — maintain verification cadence.');
+    const suspicious = filtered.filter(u=> (u.status||'').toLowerCase() === 'suspicious').length;
+    if(suspicious > 0) tips.push('Investigate ' + suspicious + ' suspicious flag(s) — review footage or logs.');
+    else tips.push('No suspicious flags — continue monitoring.');
+    tips.push('Enable two-factor checks & regular audit to raise trust.');
+  /* ---------- Canvas chart helpers ---------- */
+  function setCanvasForRetina(canvas){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.offsetWidth || 300;
+    const height = rect.height || canvas.offsetHeight || 200;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx, w:width, h:height};
+  }
+  function clearCanvas(canvas){
+    const {ctx, w, h} = setCanvasForRetina(canvas);
+    ctx.clearRect(0,0,w,h);
+    return {ctx, w, h};
+  }
+
+  function drawLineChart(canvas, labels, values){
+    const {ctx, w, h} = clearCanvas(canvas);
+    if(!values || values.length === 0){
+      ctx.fillStyle = "#64748b";
+      ctx.font = "14px Inter, Arial";
+      ctx.fillText("No data", w/2 - 18, h/2);
+      return;
+    }
+    const padding = {left:42, right:18, top:28, bottom:44};
+    const chartW = w - padding.left - padding.right;
+    const chartH = h - padding.top - padding.bottom;
+    // grid
+    ctx.strokeStyle = "#eef4fb";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let i=0;i<5;i++){
+      const y = padding.top + (chartH/4)*i;
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(w - padding.right, y);
+    }
+    ctx.stroke();
+
+    const max = Math.max(...values, 10);
+    const min = 0;
+    const vRange = max - min || 1;
+
+    ctx.lineWidth = 2.8;
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, "rgba(0,255,185,0.95)");
+    grad.addColorStop(1, "rgba(0,140,255,0.98)");
+    ctx.strokeStyle = grad;
+    ctx.beginPath();
+    values.forEach((val, idx)=>{
+      const x = padding.left + (chartW/(values.length-1 || 1)) * idx;
+      const y = padding.top + chartH - ((val - min) / vRange) * chartH;
+      if(idx===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // fill under line
+    ctx.lineTo(padding.left + chartW, padding.top + chartH);
+    ctx.lineTo(padding.left, padding.top + chartH);
+    ctx.closePath();
+    const fillGrad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
+    fillGrad.addColorStop(0, "rgba(0,140,255,0.12)");
+    fillGrad.addColorStop(1, "rgba(0,255,185,0.02)");
+    ctx.fillStyle = fillGrad;
+    ctx.fill();
+
+    // points
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#0ea5e9";
+    ctx.lineWidth = 1.6;
+    ctx.font = "12px Inter, Arial";
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    values.forEach((val, idx)=>{
+      const x = padding.left + (chartW/(values.length-1 || 1)) * idx;
+      const y = padding.top + chartH - ((val - min) / vRange) * chartH;
+      ctx.beginPath();
+      ctx.arc(x,y,4,0,Math.PI*2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.strokeStyle = "#0ea5e9";
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fillText(val + "%", x - 14, y - 12);
+    });
+
+    // x-axis labels
+    ctx.fillStyle = "rgba(255,255,255,0.78)";
+    ctx.font = "12px Inter, Arial";
+    ctx.textAlign = "center";
+    labels.forEach((lab, idx)=>{
+      const x = padding.left + (chartW/(labels.length-1 || 1)) * idx;
+      ctx.fillText(lab, x, h - 10);
+    });
+  }
+
+  function drawPieChart(canvas, values, labels){
+    const {ctx, w, h} = clearCanvas(canvas);
+    const cx = w/2;
+    const cy = h/2;
+    const radius = Math.min(w, h)/2 - 16;
+    const total = (Array.isArray(values) ? values.reduce((a,b)=>a+b,0) : 0) || 1;
+    const colors = ["#ef4444","#10b981","#f59e0b","#8b5cf6","#0ea5e9","#e11d48"];
+    let start = -Math.PI/2;
+    for(let i=0;i<values.length;i++){
+      const slice = values[i] / total;
+      const end = start + slice * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,radius,start,end);
+      ctx.closePath();
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      start = end;
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.font = "700 14px Inter, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Distribution", cx, cy - 6);
+    ctx.font = "600 12px Inter, Arial";
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.fillText(String((values && values.length) ? values[0] : 0), cx, cy + 18);
+  }
+
+    /* ---------- Navigation & event wiring ---------- */
+    function showPage(id){
+      document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+      const pageEl = document.getElementById(id);
+      if(pageEl) pageEl.classList.add("active");
+      document.querySelectorAll(".nav-link").forEach(btn=>{ btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); });
+      const btn = document.querySelector('.nav-link[data-page="' + id + '"]');
+      if(btn){ btn.classList.add('active'); btn.setAttribute('aria-pressed','true'); }
+
+      // Ensure attendance date input has a sensible default (YYYY-MM-DD) when present
+      const dateInput = document.getElementById('attendanceDate');
+      if(dateInput && !dateInput.value) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateInput.value = year + '-' + month + '-' + day;
+      }
+
+      if(id === "page-dashboard") renderDashboard();
+      if(id === "page-presence") renderPresence("presenceMap");
+      if(id === "page-attendance") {
+        // Render attendance list using whatever date is currently set (pinned or not)
+        renderAttendanceList();
+      }
+      if(id === "page-trust") renderTrustPage();
+      if(id === "page-insights") { renderInsights(); if(selectedAnalyticsId) showAnalyticsDetail(selectedAnalyticsId); }
+      setTimeout(()=>{ if(id==='page-insights' && selectedAnalyticsId) showAnalyticsDetail(selectedAnalyticsId); }, 60);
+    }
+
+    document.querySelectorAll(".nav-link").forEach(btn=> btn.addEventListener('click', ()=> {
+      const target = btn.dataset.page;
+      // If user navigates away from Attendance, clear the pin so pages behave normally
+      if(target !== 'page-attendance') {
+        attendancePinned = false;
+        pinnedAttendanceDate = null;
+        pinnedAttendanceClass = 'all';
+        // hide unpin button if visible
+        try { const unpinBtn = document.getElementById('attendanceUnpinBtn'); if(unpinBtn){ unpinBtn.style.display = 'none'; } } catch(e){}
+        // clear persisted pin state
+        try { localStorage.removeItem('pa_attendance_pinned'); localStorage.removeItem('pa_attendance_date'); localStorage.removeItem('pa_attendance_class'); } catch(e){}
+      }
+      showPage(target);
+    }) );
+
+    document.getElementById("openPresence").addEventListener('click', ()=> showPage("page-presence"));
+
+    document.getElementById("classSelector").addEventListener('change', (e)=> {
+      selectedClass = e.target.value;
+      const active = document.querySelector('.page.active');
+      if(active) showPage(active.id);
+      else renderDashboard();
+    });
+
+    // CSV export
+    function exportCSV(rows, filename='snapshot.csv'){
+      if(!rows || !rows.length) return;
+      const keys = Object.keys(rows[0]);
+      const csv = [keys.join(',')].concat(rows.map(r => keys.map(k => '"' + String(r[k]).replace(/"/g,'""') + '"').join(','))).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('downloadSnapshot').addEventListener('click', ()=>{
+      const rows = users.map(u=>({ id:u.id, name:u.name, class:u.class, status:u.status, trust:u.trustScore }));
+      exportCSV(rows, 'presence_snapshot_' + Date.now() + '.csv');
+    });
+
+    document.getElementById('exportInsightCSV').addEventListener('click', ()=>{
+      const filtered = filterUsers();
+      const rows = filtered.map(u=>({ id:u.id, name:u.name, class:u.class, status:u.status, trust:u.trustScore }));
+      exportCSV(rows, 'insight_export_' + Date.now() + '.csv');
+    });
+
+    document.getElementById('regenUsers').addEventListener('click', ()=>{
+      // local mock regeneration (client-only)
+      users = (function makeUsers(n=36){
+        const NAMES = ["Aarav","Ishaan","Diya","Vivaan","Anaya","Kavya","Rohan","Sneha","Arjun","Riya","Maya","Karthik","Neha","Sahil","Priya","Vikram"];
+        const STATUSES = ["present","absent","late","suspicious"];
+        return Array.from({length:n}).map((_,i)=>{
+          const name = NAMES[i % NAMES.length] + " " + (100+i);
+          return {
+            id: "U" + (i+1),
+            name,
+            class: ["A","B","C"][i % 3],
+            status: STATUSES[Math.floor(Math.random()*STATUSES.length)],
+            trustScore: Math.floor(60 + Math.random()*40),
+            avatarUrl: 'https://i.pravatar.cc/100?img=' + ((i%70)+1)
+          };
+        });
+      })();
+      renderCurrentPage();
+    });
+
+    // Load attendance button event listener
+    document.getElementById('loadAttendanceBtn').addEventListener('click', async ()=>{
+      const rawDate = document.getElementById('attendanceDate').value;
+      const classFilter = document.getElementById('attendanceClass').value;
+      
+      if (!rawDate) {
+        alert('Please select a date first');
+        return;
+      }
+      // Normalize to ISO (YYYY-MM-DD) to avoid locale or dd-mm-yyyy format mismatches
+      const isoDate = getISODateFromInput(rawDate);
+      if(!isoDate){
+        alert('Could not parse the selected date. Please choose a valid date from the picker.');
+        return;
+      }
+      
+      try {
+        // Show loading state
+        const loadBtn = document.getElementById('loadAttendanceBtn');
+        const originalText = loadBtn.innerText;
+        loadBtn.innerText = 'Loading...';
+        loadBtn.disabled = true;
+        loadBtn.classList.add('btn-loading');
+        
+  // use normalized ISO date for loading and pinning
+  await loadAttendanceForDateAndClass(isoDate, classFilter);
+  // ensure the date input is set to ISO so formatting is consistent
+  try { document.getElementById('attendanceDate').value = isoDate; } catch(e){}
+
+  // Pin attendance view so it remains visible until user unpins or changes date
+  attendancePinned = true;
+  pinnedAttendanceDate = isoDate;
+  pinnedAttendanceClass = classFilter || 'all';
+
+  // Persist pin state so transient reloads or re-inits don't clear it
+  try {
+    localStorage.setItem('pa_attendance_pinned', '1');
+    localStorage.setItem('pa_attendance_date', String(pinnedAttendanceDate));
+    localStorage.setItem('pa_attendance_class', String(pinnedAttendanceClass));
+  } catch(e){ console.warn('persist pin failed', e); }
+
+  // Show the Unpin button when pinned
+  try { const unpinBtn = document.getElementById('attendanceUnpinBtn'); if(unpinBtn){ unpinBtn.style.display = 'inline-block'; } } catch(e){}
+
+  // Ensure Attendance page remains active and render
+  try { showPage('page-attendance'); } catch(e){ /* ignore if showPage not available yet */ }
+  renderAttendanceList();
+
+  // Reset button state
+  loadBtn.innerText = originalText;
+  loadBtn.disabled = false;
+  loadBtn.classList.remove('btn-loading');
+      } catch (error) {
+        console.error('Error loading attendance:', error);
+        alert('Failed to load attendance. Please try again.');
+
+        // Clear any pinned state since the load failed
+        attendancePinned = false;
+        pinnedAttendanceDate = null;
+        pinnedAttendanceClass = 'all';
+
+        // Reset button
+        const loadBtn = document.getElementById('loadAttendanceBtn');
+        loadBtn.innerText = 'Load';
+        loadBtn.disabled = false;
+        loadBtn.classList.remove('btn-loading');
+      }
+    });
+
+    document.getElementById('refreshInsight').addEventListener('click', ()=>{const t = document.getElementById('insightTime');t.innerText = 'Refreshing...';setTimeout(()=> showAnalyticsDetail(selectedAnalyticsId), 400);});
+
+    document.getElementById('improveScore').addEventListener('click', ()=> alert("Tip: run verification & audits to improve trust score. (Demo)"));
+
+    // Export attendance CSV button event listener
+    document.getElementById('attendanceExportBtn').addEventListener('click', ()=>{
+      const classSel = document.getElementById('attendanceClass').value || 'all';
+  const dateIso = getISODateFromInput(document.getElementById('attendanceDate').value || new Date());
+      const filtered = users.filter(u => classSel === 'all' || (u.class || '') === classSel);
+      
+      if (!filtered.length) {
+        alert('No attendance data to export');
+        return;
+      }
+      
+      const rows = filtered.map(u => ({
+        id: u.id,
+        name: u.name,
+        class: u.class || '',
+        status: u.status || 'absent',
+        trust: u.trustScore || 0,
+        date: dateIso
+      }));
+      
+      exportCSV(rows, 'attendance_' + classSel + '_' + dateIso + '.csv');
+    });
+
+    // WebSocket live updates (single initializer used by app)
+    // WebSocket live updates (single initializer used by app)
+    function initWebsocket(){
+      try {
+        // Build wsUrl from API_BASE when available; fall back to current origin if API_BASE is not an absolute URL.
+        let wsUrl;
+        try {
+          // Try to parse API_BASE; if it's absolute use its host
+          const parsed = new URL(API_BASE);
+          const proto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = proto + '//' + parsed.host + '/ws/events';
+        } catch (e) {
+          // Fallback to current location
+          const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = proto + '//' + location.host + '/ws/events';
+        }
+
+        const token = getToken();
+        if(token) wsUrl += (wsUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+
+        const ws = new WebSocket(wsUrl);
+        window.pa_ws = ws;
+        ws.onopen = ()=> console.log("WS connected", wsUrl);
+
+        // Handle incremental presence updates without full reloads
+        ws.onmessage = (ev)=> {
+          try{
+            const m = JSON.parse(ev.data);
+            if(!m) return;
+
+            // Only handle presence messages with a payload
+            if(m.type === 'presence' && m.payload){
+              try {
+                updateUserPresence(m.payload);
+              } catch(err){
+                console.warn('updateUserPresence failed', err);
+                safeLoadUsersOnce();
+              }
+              return;
+            }
+
+            // keep previous behavior for other messages (optional)
+            if(m.type === 'info' || m.type === 'ack'){
+              return;
+            }
+
+            // recognized event: optimistic present mark
+            if(m.type === 'recognized' && m.student_id){
+              updateUserPresence({ student_id: m.student_id, status: 'Present', timestamp: new Date().toISOString(), confidence: m.confidence || 0 });
+              return;
+            }
+
+          } catch (e) {
+            console.warn("WS parse", e);
+          }
+        };
+
+        ws.onclose = ()=> { window.pa_ws = null; console.log('WS closed'); };
+        ws.onerror = (err)=> console.warn("WS error", err);
+      } catch(e){ console.warn('init websocket failed', e); }
+    }
+    /* ---------- Attendance page helpers ---------- */
+
+    /* ---------- Attendance page helpers ---------- */
+
+    // Helper to format a Date or parse common date strings into YYYY-MM-DD
+    function formatDateForAPI(date){
+      if(!date) return null;
+      if(date instanceof Date){
+        const y = date.getFullYear();
+        const m = String(date.getMonth()+1).padStart(2,'0');
+        const d = String(date.getDate()).padStart(2,'0');
+        return y + '-' + m + '-' + d;
+      }
+      const s = String(date).trim();
+      // Already in YYYY-MM-DD
+      if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // Common separators: -, /
+      const parts = s.split(/[-\/]/).map(p=>p.trim());
+      if(parts.length === 3){
+        // If first part is year (YYYY-MM-DD)
+        if(parts[0].length === 4) return parts[0] + '-' + parts[1].padStart(2,'0') + '-' + parts[2].padStart(2,'0');
+        // Assume DD-MM-YYYY or DD/MM/YYYY
+        return parts[2].padStart(2,'0') + '-' + parts[1].padStart(2,'0') + '-' + parts[0].padStart(2,'0');
+      }
+      const dt = new Date(date);
+      if(!isNaN(dt.getTime())) return formatDateForAPI(dt);
+      return null;
+    }
+
+    // Helper to get ISO date string (YYYY-MM-DD) from date input or Date object
+    function getISODateFromInput(val){
+      if(!val) return formatDateForAPI(new Date());
+      return formatDateForAPI(val);
+    }
+
+    // Load attendance for a given ISO date string and optional class filter
+    async function loadAttendanceForDateAndClass(iso, classFilter){
+      const classParam = (classFilter && classFilter !== 'all') ? '&class=' + encodeURIComponent(classFilter) : '';
+      try {
+        const body = await apiFetch('/api/attendance?date=' + encodeURIComponent(iso) + classParam);
+        // backend may return array or { attendance: [...] }
+        const records = Array.isArray(body) ? body : (body && body.attendance ? body.attendance : []);
+        if(records && records.length){
+          // Keep a copy of the attendance records for the pinned date so UI rendering
+          // can prefer these values over live users[].status while pinned.
+          try {
+            pinnedAttendanceRecords = {};
+            for(const r of records){
+              const sid = String(r.student_id || r.id || r.studentId || '').trim();
+              if(!sid) continue;
+              const status = (r.status || r.state || r.label || 'present').toString().toLowerCase();
+              pinnedAttendanceRecords[sid] = status;
+            }
+          } catch(e){ console.warn('build pinnedAttendanceRecords failed', e); }
+
+          applyAttendanceToUsers(records);
+          document.getElementById('attendanceTitle').innerText = (classFilter==='all' ? 'All classes' : 'Class ' + classFilter) + ' • ' + iso;
+        } else {
+          document.getElementById('attendanceTitle').innerText = (classFilter==='all' ? 'All classes' : 'Class ' + classFilter) + ' • ' + iso + ' (No records)';
+          document.getElementById('attendanceList').innerHTML = '<div style="color:var(--muted)">No attendance records for ' + iso + '.</div>';
+        }
+      } catch (err){
+        console.error('Failed to load attendance for date', iso, err);
+        alert('Failed to load attendance for date. See console.');
+      }
+    }
+
+    // Render attendance cards (uses current users[] filtered by class and presence of attendance state)
+    function renderAttendanceList(){
+    // Prefer pinned date/class when attendance is pinned so the view does not jump back to today
+    const classSel = (attendancePinned && pinnedAttendanceClass) ? pinnedAttendanceClass : (document.getElementById('attendanceClass').value || 'all');
+  const iso = (attendancePinned && pinnedAttendanceDate) ? pinnedAttendanceDate : getISODateFromInput(document.getElementById('attendanceDate').value || new Date());
+      const listEl = document.getElementById('attendanceList');
+      const filtered = users.filter(u => classSel === 'all' || (u.class || '') === classSel);
+
+      if(!filtered.length){
+        listEl.innerHTML = '<div style="color:var(--muted)">No students found for ' + classSel + '</div>';
+        return;
+      }
+
+  listEl.innerHTML = filtered.map(u => {
+    // If pinned for a specific date, prefer the pinnedAttendanceRecords mapping (robust lookup)
+    const pinnedStatus = getPinnedStatusForUser(u);
+    const status = (pinnedStatus ? String(pinnedStatus) : (u.status || 'absent').toLowerCase());
+    const avatarField = u.photo || u.photo_url || u.avatar || u.avatarUrl || u.avatar_url || '';
+    const avatarSrc = normalizeAvatarUrl(avatarField || u.avatarUrl || u.avatar_url);
+    const onerr = "this.onerror=null;this.src='" + API_BASE.replace(/\/$/,'') + "/avatars/default.jpg'";
+    return (
+      '<div class="presence-card" data-id="' + u.id + '">' +
+        '<img src="' + avatarSrc + '" alt="' + u.name + '" onerror="' + onerr + '">' +
+        '<div class="name">' + u.name + '</div>' +
+        '<div class="text-sm muted">' + (u.class || '') + '</div>' +
+        '<div class="status ' + status + '" style="margin-top:8px">' + status + '</div>' +
+        '<div style="margin-top:8px; display:flex; gap:8px; justify-content:center;">' +
+          (canMark() ? '<button class="btn-ghost att-mark-btn" data-id="' + u.id + '" data-date="' + iso + '">Mark Present</button>' : '') +
+          (isHod() ? '<button class="btn-ghost att-del-btn" data-id="' + u.id + '">Delete</button>' : '') +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+      // wire attendance buttons
+      document.querySelectorAll('.att-mark-btn').forEach(btn => {
+        btn.onclick = async () => {
+          btn.disabled = true;
+          const studentId = btn.dataset.id;
+          const dateIso = btn.dataset.date || iso;
+          try {
+            // POST to your mark endpoint
+            await apiFetch('/api/attendance/mark', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ student_id: studentId, status: 'Present', date: dateIso })
+            });
+            // optimistic local update to avoid reloading everything immediately
+            updateUserPresence({ student_id: studentId, status: 'present', timestamp: new Date().toISOString() });
+            // also update pinnedAttendanceRecords if pinned so the UI reflects the manual mark
+            try {
+              if(attendancePinned){
+                const keys = [String(studentId)];
+                // try to find the user object for other keys
+                const u = users.find(x => String(x.id) === String(studentId) || String(x.student_id) === String(studentId));
+                if(u){
+                  if(u.name) keys.push(normalizeNameKey(u.name));
+                  if(u.studentId) keys.push(String(u.studentId));
+                }
+                for(const k of keys){ if(k) pinnedAttendanceRecords[String(k)] = 'present'; }
+              }
+            } catch(e){}
+          } catch (e){
+            console.warn('Mark attendance error', e);
+            alert('Failed to mark attendance.');
+          } finally { btn.disabled = false; }
+        };
+      });
+      // reuse delete flow
+      document.querySelectorAll('.att-del-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.dataset.id;
+          if(!confirm('Delete student ' + id + '? This will remove attendance & trust records.')) return;
+          try {
+            const res = await apiFetch('/api/students/' + encodeURIComponent(id), { method: 'DELETE' });
+            if(res && res.success){
+              await loadUsers();
+              renderAttendanceList();
+            } else {
+              alert('Delete failed: ' + (res && res.detail ? res.detail : JSON.stringify(res)));
+            }
+          } catch (err){
+            console.warn('delete error', err);
+            alert('Delete failed');
+          }
+        };
+      });
+    }
+
+    /* ---------- Presence button wiring (delete / mark) ---------- */
+        function wirePresenceButtons(){
+          // mark buttons
+          document.querySelectorAll('.mark-btn').forEach(btn=>{
+            btn.onclick = async () => {
+              const id = btn.dataset.id;
+              btn.disabled = true;
+              try {
+                await apiFetch('/api/simulate-checkin', {
+                  method: 'POST',
+                  headers: {'Content-Type':'application/json'},
+                  body: JSON.stringify({ student_id: id, status: 'Present' })
+                });
+                await loadUsers();
+              } catch (err){
+                console.warn('mark error', err);
+                alert('Mark failed');
+              } finally {
+                btn.disabled = false;
+              }
+            };
+          });
+    
+          // delete buttons (HOD only)
+          document.querySelectorAll('.del-btn').forEach(btn=>{
+            btn.onclick = async () => {
+              const id = btn.dataset.id;
+              if(!confirm('Delete student ' + id + '? This will remove attendance & trust records.')) return;
+              try {
+                const res = await apiFetch('/api/students/' + encodeURIComponent(id), { method: 'DELETE' });
+                if(res && res.success){
+                  await loadUsers();
+                } else {
+                  alert('Delete failed: ' + (res && res.detail ? res.detail : JSON.stringify(res)));
+                }
+              } catch (err){
+                console.warn('delete error', err);
+                alert('Delete failed');
+              }
+            };
+          });
+        }
+        document.getElementById('openSign').addEventListener('click', ()=> {
+          document.getElementById('signMsg').innerText = '';
+          document.getElementById('signModal').style.display = 'block';
+        });
+
+      // Unpin button handler (clears pinned state and hides button)
+    try {
+      const unpinBtn = document.getElementById('attendanceUnpinBtn');
+      if(unpinBtn){
+        unpinBtn.addEventListener('click', ()=>{
+          attendancePinned = false;
+          pinnedAttendanceDate = null;
+          pinnedAttendanceClass = 'all';
+            unpinBtn.style.display = 'none';
+            // clear pinned attendance records and persisted pin state
+            try { pinnedAttendanceRecords = {}; localStorage.removeItem('pa_attendance_pinned'); localStorage.removeItem('pa_attendance_date'); localStorage.removeItem('pa_attendance_class'); } catch(e){}
+          // Optionally show today's attendance after unpin
+          renderCurrentPage();
+          });
+      }
+    } catch(e){ console.warn('wire unpin failed', e); }
+    document.getElementById('cancelSign').addEventListener('click', ()=> {
+      document.getElementById('signModal').style.display = 'none';
+    });
+
+    document.getElementById('addStudentBtn').addEventListener('click', ()=> {
+      document.getElementById('addMsg').innerText = '';
+      document.getElementById('addId').value = '';
+      document.getElementById('addName').value = '';
+      document.getElementById('addClass').value = '';
+      document.getElementById('addMobile').value = '';
+      document.getElementById('addModal').style.display = 'block';
+    });
+
+    document.getElementById('cancelAdd').addEventListener('click', ()=> {
+      document.getElementById('addModal').style.display = 'none';
+    });
+
+    // Sign-in handler (clean, async)
+    document.getElementById('doSign').addEventListener('click', async () => {
+      const role = document.getElementById('signRole').value;
+      const username = (document.getElementById('signUser').value || '').trim();
+      const password = document.getElementById('signPass').value || '';
+      const msgEl = document.getElementById('signMsg');
+      msgEl.style.color = 'var(--muted)';
+      if (!username || !password) { msgEl.style.color = '#ef4444'; msgEl.innerText = 'Enter username & password'; return; }
+
+      try {
+        const j = await apiFetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, role })
+        });
+
+        if (j && j.token) {
+          localStorage.setItem('pa_token', j.token);
+          localStorage.setItem('pa_role', j.role || role || 'teacher');
+          localStorage.setItem('pa_user', j.display_name || username);
+          if (j.student_id) localStorage.setItem('pa_student_id', j.student_id);
+
+          msgEl.style.color = 'green';
+          msgEl.innerText = 'Signed in';
+          document.getElementById('signedUser').innerText = j.display_name || username;
+          document.getElementById('roleBadge').innerText = (j.role || role || 'teacher');
+          document.getElementById('signModal').style.display = 'none';
+          toggleRoleControls();
+          await loadUsers();
+          setTimeout(initWebsocket, 120);
+        } else {
+          msgEl.style.color = '#ef4444';
+          msgEl.innerText = (j && (j.detail || j.message)) ? (j.detail || j.message) : 'Login failed';
+        }
+      } catch (e) {
+        console.warn('login error', e);
+        msgEl.style.color = '#ef4444';
+        msgEl.innerText = 'Login error';
+      }
+    });
+
+    // sign out
+    document.getElementById('signOut').addEventListener('click', ()=>{ 
+      localStorage.removeItem('pa_token');
+      localStorage.removeItem('pa_role');
+      localStorage.removeItem('pa_user');
+      localStorage.removeItem('pa_student_id');
+      document.getElementById('signedUser').innerText = 'Guest';
+      document.getElementById('roleBadge').innerText = 'Guest';
+      toggleRoleControls();
+      loadUsers();
+    });
+
+    // toggle controls based on role
+    function toggleRoleControls(){
+      const addBtn = document.getElementById('addStudentBtn');
+      const role = localStorage.getItem('pa_role') || 'guest';
+      document.getElementById('signedUser').innerText = localStorage.getItem('pa_user') || 'Guest';
+      document.getElementById('roleBadge').innerText = role.charAt(0).toUpperCase() + role.slice(1);
+      if(role === 'hod'){
+        addBtn.style.display = 'inline-block';
+        document.getElementById('openSign').style.display = 'none';
+        document.getElementById('signOut').style.display = 'inline-block';
+      } else if(role === 'teacher'){
+        addBtn.style.display = 'none';
+        document.getElementById('openSign').style.display = 'none';
+        document.getElementById('signOut').style.display = 'inline-block';
+      } else if(role === 'parent'){
+        addBtn.style.display = 'none';
+        document.getElementById('openSign').style.display = 'none';
+        document.getElementById('signOut').style.display = 'inline-block';
+      } else {
+        addBtn.style.display = 'none';
+        document.getElementById('openSign').style.display = 'inline-block';
+        document.getElementById('signOut').style.display = 'none';
+      }
+    }
+
+    // add student submit
+    document.getElementById('saveAdd').addEventListener('click', async ()=>{ 
+      const id = document.getElementById('addId').value.trim();
+      const name = document.getElementById('addName').value.trim();
+      const cls = (document.getElementById('addClass').value || '').trim();
+      const mobile = (document.getElementById('addMobile').value || '').trim();
+      const avatar = document.getElementById('addAvatar').files[0];
+      const face = document.getElementById('addFace').files[0];
+      const msgEl = document.getElementById('addMsg');
+      msgEl.style.color = 'var(--muted)';
+      if(!id || !name){ msgEl.style.color = '#ef4444'; msgEl.innerText = 'ID and Name required'; return; }
+
+      const fd = new FormData();
+      fd.append('student_id', id);
+      fd.append('name', name);
+      fd.append('class_name', cls || 'A');
+      fd.append('mobile', mobile || '');
+      if(avatar) fd.append('avatar', avatar);
+      if(face) fd.append('face', face);
+
+      try {
+        // Do NOT set Content-Type for FormData — the browser will set the multipart boundary
+        const headers = localStorage.getItem('pa_token') ? { 'Authorization': 'Bearer ' + localStorage.getItem('pa_token') } : {};
+        const j = await apiFetch('/api/students', {
+          method: 'POST',
+          headers,
+          body: fd
+        });
+
+        if (j && j.success) {
+          msgEl.style.color = 'green';
+          msgEl.innerText = 'Student added';
+          document.getElementById('addModal').style.display = 'none';
+          await loadUsers();
+        } else {
+          // show server-provided error or fallback message
+          msgEl.style.color = '#ef4444';
+          msgEl.innerText = (j && (j.detail || j.message)) ? (j.detail || j.message) : JSON.stringify(j);
+        }
+      } catch (err) {
+        console.warn('add student error', err);
+        msgEl.style.color = '#ef4444';
+        msgEl.innerText = 'Failed to add student';
+      }
+    });
+
+    /* ---------- Loading & rendering orchestration ---------- */
+    function renderCurrentPage(){
+      // update signed user display & role
+      document.getElementById('signedUser').innerText = localStorage.getItem('pa_user') || 'Guest';
+      document.getElementById('roleBadge').innerText = (localStorage.getItem('pa_role') || 'Guest').toUpperCase();
+
+      // show the active page
+      // If attendance is pinned, force Attendance page to stay active
+      if(attendancePinned){
+        // ensure attendance nav button is marked active for visual consistency
+        document.querySelectorAll('.nav-link').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-pressed','false'); });
+        const btn = document.querySelector('.nav-link[data-page="page-attendance"]');
+        if(btn){ btn.classList.add('active'); btn.setAttribute('aria-pressed','true'); }
+        showPage('page-attendance');
+        return;
+      }
+
+      const active = document.querySelector('.nav-link.active');
+      const pageId = active ? active.dataset.page : 'page-dashboard';
+      showPage(pageId);
+    }
+
+    // initial load
+    (function init(){
+      // wire nav links already done earlier; ensure role controls
+      toggleRoleControls();
+      // load users / start ws
+      // restore pinned attendance state if present
+      try {
+        if(localStorage.getItem('pa_attendance_pinned')){
+          attendancePinned = true;
+          pinnedAttendanceDate = localStorage.getItem('pa_attendance_date') || null;
+          pinnedAttendanceClass = localStorage.getItem('pa_attendance_class') || 'all';
+          // show unpin button visually
+          try { const unpinBtn = document.getElementById('attendanceUnpinBtn'); if(unpinBtn) unpinBtn.style.display = 'inline-block'; } catch(e){}
+        }
+      } catch(e){ console.warn('rehydrate pin failed', e); }
+
+      loadUsers();
+      initWebsocket();
+      // refresh periodically in case no WS
+      setInterval(loadUsers, 8000);
+      // resize charts on window resize
+      window.addEventListener('resize', ()=> { if(selectedAnalyticsId) showAnalyticsDetail(selectedAnalyticsId); });
+    })();
+
+    // ensure charts resize
+    window.addEventListener('resize', ()=> { const active = document.querySelector('.page.active'); if(active && active.id === 'page-insights'){ if(selectedAnalyticsId) showAnalyticsDetail(selectedAnalyticsId); } });
+
+    // role helpers
+    function isHod(){ return (localStorage.getItem('pa_role') === 'hod'); }
+    function isTeacher(){ return (localStorage.getItem('pa_role') === 'teacher'); }
+    function isParent(){ return (localStorage.getItem('pa_role') === 'parent'); }
+    function canMark(){ return isHod() || isTeacher(); }}
+
+  </script>
+</body>
+</html>

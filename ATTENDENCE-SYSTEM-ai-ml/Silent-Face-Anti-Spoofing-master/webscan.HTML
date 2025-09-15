@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PresenceAI — WebScan (Accurate)</title>
+<style>
+:root{
+  --bg:#05070f;
+  --accent:#0ea5e9;
+  --danger:#ef4444;
+  --muted:#94a3b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  height:100%;
+  background:linear-gradient(270deg,#0a0f2c,#05070f,#0a1220);
+  background-size:600% 600%;
+  font-family:Inter,system-ui,Arial,sans-serif;
+  color:#e6f0ff;
+  overflow:hidden;
+  animation:bgShift 20s ease infinite;
+}
+@keyframes bgShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+.container{display:flex;height:100%;width:100%;padding:20px;gap:20px}
+.left-panel{flex:7;display:flex;flex-direction:column;gap:16px;justify-content:center;align-items:center;background:rgba(255,255,255,0.02);border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.7);transition:transform .3s ease}
+.left-panel:hover{transform:scale(1.01)}
+.right-panel{flex:3;background:rgba(255,255,255,0.02);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;transition:transform .3s ease}
+.right-panel:hover{transform:scale(1.02)}
+
+/* Unique animated logo */
+.logo-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:10px}
+.logo-symbol{width:70px;height:70px;border-radius:50%;background:conic-gradient(from 0deg,#0ea5e9,#3b82f6,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;animation:spin 6s linear infinite,glowPulse 3s ease-in-out infinite;box-shadow:0 0 25px rgba(14,165,233,0.8)}
+.logo-symbol svg{width:40px;height:40px;fill:#fff}
+.logo-text{font-weight:900;font-size:20px;background:linear-gradient(90deg,#0ea5e9,#22c55e);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:1px}
+.sub-text{font-size:13px;color:#9ca3af;letter-spacing:1.5px}
+@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+@keyframes glowPulse{0%{box-shadow:0 0 15px rgba(14,165,233,0.6)}50%{box-shadow:0 0 40px rgba(34,197,94,0.9)}100%{box-shadow:0 0 15px rgba(14,165,233,0.6)}}
+
+.camera-box{flex:1;width:90%;height:85%;border-radius:14px;background:#000;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(14,165,233,0.3);transition:transform .3s ease}
+.camera-box:hover{transform:scale(1.01)}
+video{width:100%;height:100%;object-fit:cover;border-radius:14px;}
+.status{position:absolute;left:16px;top:16px;padding:8px 14px;border-radius:12px;background:rgba(0,0,0,0.55);font-weight:800}
+
+/* Scan line */
+.scan-line{position:absolute;left:0;right:0;height:2px;background:var(--accent);box-shadow:0 0 15px var(--accent),0 0 25px var(--accent);animation:scanMove 3s linear infinite}
+@keyframes scanMove{0%{top:0}100%{top:100%}}
+
+/* Buttons */
+button{padding:12px 26px;border-radius:12px;border:none;font-weight:800;cursor:pointer;transition:all .25s ease,transform .25s ease;font-size:15px;min-width:150px}
+.btn-start{background:var(--accent);color:#fff;animation:btnGlow 2.5s ease-in-out infinite}
+.btn-stop{background:var(--danger);color:#fff;}
+button:hover{transform:scale(1.07);box-shadow:0 0 25px rgba(14,165,233,0.6)}
+@keyframes btnGlow{0%,100%{box-shadow:0 0 15px rgba(14,165,233,0.5)}50%{box-shadow:0 0 35px rgba(14,165,233,1)}}
+
+/* Mic icon beside camera */
+.mic-row{display:flex;gap:28px;align-items:center;justify-content:center;width:100%;height:80%}
+.big-voice-icon{width:120px;height:120px;border-radius:50%;background:rgba(14,165,233,0.15);display:flex;align-items:center;justify-content:center;box-shadow:0 0 25px rgba(14,165,233,0.6);transition:all .3s ease;animation:pulse 2s infinite}
+.big-voice-icon svg{width:80px;height:80px;fill:#4285F4}
+.big-voice-icon.active{background:rgba(14,165,233,0.9);box-shadow:0 0 100px rgba(14,165,233,1);transform:scale(1.35)}
+@keyframes pulse{0%{box-shadow:0 0 15px rgba(14,165,233,0.6)}50%{box-shadow:0 0 50px rgba(14,165,233,0.9)}100%{box-shadow:0 0 15px rgba(14,165,233,0.6)}}
+
+#recognizedList{flex-grow:1;overflow-y:auto;display:flex;flex-direction:column}
+#recognizedList li{margin-bottom:12px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.07);transition:background .3s ease}
+#recognizedList li:hover{background:rgba(14,165,233,0.2)}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="left-panel">
+    <div class="logo-wrap">
+      <div class="logo-symbol">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8.009 8.009 0 0 1-8 8z" fill="#fff"/><circle cx="12" cy="12" r="4" fill="#0ea5e9"/></svg>
+      </div>
+      <div class="logo-text">PresenceAI</div>
+      <div class="sub-text">webscan</div>
+    </div>
+    <div class="mic-row">
+      <div class="camera-box" id="cameraBox">
+        <video id="camera" autoplay playsinline muted></video>
+        <div class="scan-line"></div>
+        <div class="status" id="statusBadge">Camera Off</div>
+      </div>
+      <div class="big-voice-icon" id="voiceIcon">
+        <!-- Google-style mic icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#4285F4" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path fill="#34A853" d="M11 18.92h2V22h-2z"/><path fill="#EA4335" d="M7.05 11H5a7 7 0 0 0 14 0h-2.05a5 5 0 0 1-9.9 0z"/><path fill="#FBBC05" d="M15.54 11H8.46a3.54 3.54 0 0 0 7.08 0z"/></svg>
+      </div>
+    </div>
+    <div class="controls" style="margin-top:16px;justify-content:center">
+      <button id="startBtn" class="btn-start">Start Camera</button>
+      <button id="stopBtn" class="btn-stop hidden">Stop</button>
+    </div>
+    <div class="controls" style="margin-top:12px;justify-content:center">
+      <div class="small">Status: <span id="statusSmall">idle</span></div>
+    </div>
+  </div>
+  <div class="right-panel">
+    <div style="font-weight:800;margin-bottom:10px">Today Recognitions (<span id="count">0</span>)</div>
+    <ul id="recognizedList" style="font-size:15px;line-height:1.5;color:#cfe8ff;"></ul>
+  </div>
+</div>
+
+<script>
+const camera=document.getElementById('camera');
+const startBtn=document.getElementById('startBtn');
+const stopBtn=document.getElementById('stopBtn');
+const statusBadge=document.getElementById('statusBadge');
+const recognizedList=document.getElementById('recognizedList');
+const statusSmall=document.getElementById('statusSmall');
+const voiceIcon=document.getElementById('voiceIcon');
+const countEl=document.getElementById('count');
+
+let stream=null;let scanning=false;let scanInterval=null;let scanInProgress=false;
+let API_BASE=(location.protocol==='file:'||location.port==='5500')?"http://127.0.0.1:8000":location.origin;
+
+// Cache recognized students for one day
+let recognizedToday={};
+let lastReset=new Date().toDateString();
+function resetDaily(){recognizedToday={};recognizedList.innerHTML='';countEl.textContent=0;lastReset=new Date().toDateString();}
+setInterval(()=>{if(new Date().toDateString()!==lastReset){resetDaily();}},60000);
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});
+    camera.srcObject=stream;
+    statusBadge.innerText='Live — scanning';
+    startBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+    scanning=true;
+    statusSmall.innerText='scanning';
+    scanInterval=setInterval(()=>{if(!scanInProgress)autoScanFrames(3,150)},1500);
+  }catch(e){alert('Camera error: '+e);}
+}
+function stopCamera(){
+  scanning=false;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  camera.srcObject=null;
+  statusBadge.innerText='Camera Off';
+  startBtn.classList.remove('hidden');
+  stopBtn.classList.add('hidden');
+  if(scanInterval){clearInterval(scanInterval);scanInterval=null;}
+  statusSmall.innerText='idle';
+}
+
+async function captureFrameBlob(){
+  const v=camera;
+  const cvs=document.createElement('canvas');
+  cvs.width=v.videoWidth||640;
+  cvs.height=v.videoHeight||480;
+  const ctx=cvs.getContext('2d');
+  ctx.drawImage(v,0,0,cvs.width,cvs.height);
+  return new Promise(r=>cvs.toBlob(r,'image/jpeg',0.9));
+}
+
+async function autoScanFrames(n=3,delay=150){
+  if(!scanning||!stream)return;
+  scanInProgress=true;
+  const frames=[];
+  try{
+    for(let i=0;i<n;i++){
+      const b=await captureFrameBlob();
+      if(b)frames.push(b);
+      await new Promise(r=>setTimeout(r,delay));
+    }
+    if(frames.length)await postFrames(frames);
+  }catch(e){console.error(e);}finally{scanInProgress=false;}
+}
+
+function updateRecognizedList(name,status,message){
+  const ts=new Date().toLocaleTimeString();
+  const li=document.createElement('li');
+  li.textContent=`${ts} — ${name} (${status}) ${message||''}`;
+  recognizedList.insertBefore(li,recognizedList.firstChild);
+  countEl.textContent=recognizedList.children.length;
+}
+
+async function postFrames(blobs){
+  if(!blobs.length)return;
+  const fd=new FormData();
+  blobs.forEach((b,i)=>fd.append('files',b,`frame_${Date.now()}_${i}.jpg`));
+  try{
+    const res=await fetch(`${API_BASE}/api/checkin`,{method:'POST',body:fd});
+    const j=await res.json().catch(()=>null);
+    if(res.ok&&j&&j.student_id){
+      const name=j.display_name||j.student_id;
+      const status=j.status||'Present';
+      const todayKey=new Date().toDateString()+":"+name;
+      if(recognizedToday[todayKey]){
+        announceRecognition(name,'already marked today');
+        updateRecognizedList(name,status,'(already marked)');
+        return;
+      }
+      recognizedToday[todayKey]=true;
+      announceRecognition(name,'present');
+      updateRecognizedList(name,'Present');
+    }
+  }catch(e){console.warn(e);}
+}
+
+startBtn.addEventListener('click',startCamera);
+stopBtn.addEventListener('click',stopCamera);
+
+function announceRecognition(name,status){
+  voiceIcon.classList.add('active');
+  const phrase=status.includes('already')?`${name} already marked today`:`${name} present`;
+  let audio=new Audio(`${API_BASE}/api/speak?text=${encodeURIComponent(phrase)}`);
+  audio.volume=1;
+  audio.play().catch(()=>{
+    const utter=new SpeechSynthesisUtterance(phrase);
+    utter.lang='en-US';
+    utter.rate=0.95; utter.pitch=1;
+    speechSynthesis.speak(utter);
+  });
+  audio.onended=()=>voiceIcon.classList.remove('active');
+}
+</script>
+</body>
+</html>
+
