@@ -48,8 +48,7 @@ SQLite / PostgreSQL for database storage
 
 Clone the repository:
 
-git clone https://github.com/saigx/attendance-system.git
-cd ATTENDENCE-SYSTTEM
+git clone
 
 
 Create virtual environment and install dependencies:
@@ -64,7 +63,7 @@ Run the backend server:
 python app.py  
 
 
-Access the dashboard at http://localhost:5000/
+Access the dashboard at 
 
 📈 Future Scope
 
